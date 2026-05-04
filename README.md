@@ -4,7 +4,7 @@
 
 <img src="docs/logo/logo.svg" alt="Cultural Proximity Analytics logo" width="680" style="margin: 20px 0;">
 
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-black.svg)](https://github.com/gstinoco/cultural-proximity-analytics) [![Python](https://img.shields.io/badge/Python-3.x-blue.svg)](https://www.python.org/downloads/) [![pandas](https://img.shields.io/badge/pandas-Data%20Analysis-150458.svg?logo=pandas)](https://pandas.pydata.org/) [![NumPy](https://img.shields.io/badge/NumPy-Scientific%20Computing-013243.svg?logo=numpy)](https://numpy.org/) [![Seaborn](https://img.shields.io/badge/Seaborn-Visualization-4C72B0.svg)](https://seaborn.pydata.org/) [![Matplotlib](https://img.shields.io/badge/Matplotlib-Visualization-11557C.svg)](https://matplotlib.org/) [![haversine](https://img.shields.io/badge/haversine-Geo%20Distance-3C3C3C.svg)](https://pypi.org/project/haversine/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-black.svg)](https://github.com/gstinoco/cultural-proximity-analytics) [![Python](https://img.shields.io/badge/Python-3.x-blue.svg)](https://www.python.org/downloads/) [![pandas](https://img.shields.io/badge/pandas-Data%20Analysis-150458.svg?logo=pandas)](https://pandas.pydata.org/) [![NumPy](https://img.shields.io/badge/NumPy-Scientific%20Computing-013243.svg?logo=numpy)](https://numpy.org/) [![Seaborn](https://img.shields.io/badge/Seaborn-Visualization-4C72B0.svg)](https://seaborn.pydata.org/) [![Matplotlib](https://img.shields.io/badge/Matplotlib-Visualization-11557C.svg)](https://matplotlib.org/) [![SciPy](https://img.shields.io/badge/SciPy-Stats%20(Optional)-8CAAE6.svg?logo=scipy)](https://scipy.org/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Reproducible workflow to compute distances (Haversine) and analyze correlations between host variables and proximity to cultural hotspots**
 
@@ -45,17 +45,16 @@ This repository implements an analysis workflow to:
 - Compute **geographical distances** from short-term rental listings to a set of **cultural hotspots** in a city using the **Haversine** formula (km).
 - Generate an output dataset with all distances appended and ready for analysis.
 - Compute **Pearson correlations** between a target host variable (e.g., superhost, listings count, or a host-level derived count) and distances to cultural hotspots.
-- Export results as **correlation matrices** (PNG/PDF) and print correlation values to the console.
+- Export results as **correlation matrices** (PNG/PDF) and a **machine-readable correlation table** (CSV) with p-values and BH-FDR q-values (when SciPy is available).
 
 Included in this repository:
 - [Correlations.py](Correlations.py): runnable script (full pipeline).
-- [Correlations.ipynb](Correlations.ipynb): explanatory notebook using the same workflow.
 
 ### :wrench: Key Capabilities
 - **:triangular_ruler: Distance computation**: Haversine distances (km) from each listing to multiple hotspots.
 - **:bar_chart: Correlation analysis**: Pearson correlation for existing variables and derived count-based variables.
 - **:framed_picture: Publication-ready outputs**: heatmap correlation matrices exported to PNG and PDF.
-- **:floppy_disk: Reproducible artifacts**: CSV outputs + `.tar.gz` compression for portability.
+- **:floppy_disk: Reproducible artifacts**: CSV outputs + `.tar.gz` compression for portability + place name/slug mapping.
 
 ### :microscope: Typical Use Cases
 
@@ -72,15 +71,16 @@ Included in this repository:
 ### :triangular_ruler: Distances (Haversine)
 - Reads a listings/hosts dataset with **latitude/longitude**.
 - Reads a cultural hotspots dataset with **name/latitude/longitude**.
-- Adds one distance column per hotspot using the `d_t_...` prefix (km).
+- Adds one distance column per hotspot using the `d_t_<slug>` prefix (km), where `<slug>` is an ASCII-safe normalized label derived from `place_name`.
 - Filters relevant columns, maps `host_is_superhost` to 0/1, and removes missing rows.
-- Exports the final CSV and a compressed `.tar.gz` copy.
+- Exports the final CSV, a compressed `.tar.gz` copy, and a `<result>_places_mapping.csv` file to map `place_name -> place_slug`.
 
 ### :bar_chart: Correlations
 - Computes Pearson correlations between:
   - An **existing variable** (e.g., `host_is_superhost`, `host_total_listings_count`) and distances, or
   - A **derived variable** based on counts (e.g., `listing_count` by `host_id`) and distances.
 - Generates and saves a **correlation matrix** (PNG and PDF) using Seaborn/Matplotlib.
+- Exports a per-distance **correlation summary table** (CSV) with correlation, `n`, p-value, and BH-FDR q-value (if SciPy is available).
 
 ---
 
@@ -93,15 +93,21 @@ Included in this repository:
 ### :clipboard: Dependencies
 
 ```bash
-pip install numpy pandas seaborn matplotlib haversine
+pip install numpy pandas seaborn matplotlib
 ```
 
 Note: `tarfile` is part of Python’s standard library (you do not install it via pip).
 
+Optional (recommended for p-values and multiple-testing correction outputs):
+
+```bash
+pip install scipy
+```
+
 ### :white_check_mark: Installation Verification
 
 ```bash
-python -c "import numpy, pandas, seaborn, matplotlib, haversine; print('Installation successful!')"
+python -c "import numpy, pandas, seaborn, matplotlib; print('Installation successful!')"
 ```
 
 ---
@@ -134,7 +140,7 @@ tar -xzf Information/cultural_places.tar.gz -C Information</code></pre>
       <td><b>3) Check outputs</b></td>
       <td>
         Files are generated under <code>Results/</code>:<br/>
-        <code>hosts_with_distances_cultural.csv</code> (and <code>.tar.gz</code>) + matrices <code>Correlation_Matrix_*.png/.pdf</code>.
+        <code>hosts_with_distances_cultural.csv</code> (and <code>.tar.gz</code>) + <code>hosts_with_distances_cultural_places_mapping.csv</code> + matrices <code>Correlation_Matrix_*.png/.pdf</code> + tables <code>Correlation_Matrix_*_corr_table.csv</code>.
       </td>
     </tr>
   </tbody>
@@ -159,18 +165,28 @@ The default flow in [Correlations.py](Correlations.py) performs:
 ### :test_tube: Using as a library (functions)
 
 ```python
-from Correlations import Distances, correlations_existing_variable, correlations_new_variable
+from Correlations import (
+    distances,
+    correlate_against_variable,
+    correlate_against_listing_count,
+)
 
-Distances(
+distances(
     hosts="Information/hosts.csv",
     places="Information/cultural_places.csv",
     result="Results/hosts_with_distances_cultural.csv",
 )
 
-correlations_existing_variable(
+correlate_against_variable(
     filename="Results/hosts_with_distances_cultural.csv",
     variable="host_is_superhost",
     matrix_path="Results/Correlation_Matrix_1",
+)
+
+correlate_against_listing_count(
+    filename="Results/hosts_with_distances_cultural.csv",
+    variable="host_id",
+    matrix_path="Results/Correlation_Matrix_3",
 )
 ```
 
@@ -189,8 +205,11 @@ The script also uses (and/or preserves) identification columns like `id`, `host_
 ### :classical_building: `cultural_places.csv` (cultural hotspots)
 
 Must include:
-- `place_name`: name used to build `d_t_<place_name>` columns
+- `place_name`: original label used to build a stable ASCII slug
 - `latitude`, `longitude`
+
+The pipeline will generate distance columns named `d_t_<place_slug>` and will write a mapping file:
+- `<result>_places_mapping.csv` containing `place_name`, `place_slug`, `latitude`, `longitude`
 
 ---
 
@@ -199,15 +218,18 @@ Must include:
 ```
 Cultural-Proximity-Analytics/
 ├── Correlations.py                     # Pipeline: distances + correlations + exports
-├── Correlations.ipynb                  # Explanatory notebook
 ├── Information/                        # Input datasets (tar.gz containing CSV)
 │   ├── hosts.tar.gz
 │   └── cultural_places.tar.gz
 ├── Results/                            # Outputs (CSV, PNG, PDF)
 │   ├── hosts_with_distances_cultural.csv.tar.gz
+│   ├── hosts_with_distances_cultural_places_mapping.csv
 │   ├── Correlation_Matrix_1.png/.pdf
 │   ├── Correlation_Matrix_2.png/.pdf
 │   └── Correlation_Matrix_3.png/.pdf
+│   ├── Correlation_Matrix_1_corr_table.csv
+│   ├── Correlation_Matrix_2_corr_table.csv
+│   └── Correlation_Matrix_3_corr_table.csv
 ├── docs/                               # Project assets (logo, figures, team)
 └── LICENSE
 ```
@@ -218,7 +240,7 @@ Cultural-Proximity-Analytics/
 
 ### :triangular_ruler: Geographical distance (Haversine)
 
-For each listing with coordinates $(\phi_1, \lambda_1)$ and cultural hotspot $(\phi_2, \lambda_2)$, the distance in km is computed using the Haversine formula (implemented by the `haversine` library).
+For each listing with coordinates $(\phi_1, \lambda_1)$ and cultural hotspot $(\phi_2, \lambda_2)$, the distance in km is computed using the Haversine formula (implemented in NumPy for speed).
 
 ### :bar_chart: Correlations (Pearson)
 
@@ -359,7 +381,7 @@ Correlation matrices generated by the included example run (stored under `docs/f
     </tr>
     <tr>
       <td align="center" width="120">
-        <img src="docs/team/profile_placeholder_man.svg" alt="Dr. Narciso Salvador Tinoco-Guerrero" width="96" height="96" style="border-radius: 50%;">
+        <img src="docs/team/nstinoco.webp" alt="Dr. Narciso Salvador Tinoco-Guerrero" width="96" height="96" style="border-radius: 50%;">
       </td>
       <td>
         <b>Dr. Narciso Salvador Tinoco-Guerrero</b> :mexico:<br/>
@@ -644,9 +666,9 @@ This project is distributed under the [MIT License](LICENSE).
     <td width="50%" valign="top">
       <div style="border: 1px solid #d0d7de; border-radius: 12px; padding: 16px;">
         <div align="center">
-          <b>💰 CONAHCyT</b><br/>
-          <sub>National Council of Humanities, Sciences and Technologies, Mexico</sub><br/><br/>
-          <a href="https://conahcyt.mx/"><img alt="Website" src="https://img.shields.io/badge/🌐-Website-darkgreen?style=flat-square"></a>
+          <b>💰 SeCiHTI</b><br/>
+          <sub>Secretariat of Science, Humanities, Technology and Innovation, Mexico</sub><br/><br/>
+          <a href="http://secihti.mx/"><img alt="Website" src="https://img.shields.io/badge/🌐-Website-darkgreen?style=flat-square"></a>
           <img alt="Type: Government" src="https://img.shields.io/badge/🏷️%20Type-Government-2D6A4F?style=flat-square">
           <img alt="Support: Funding" src="https://img.shields.io/badge/🤝%20Support-Funding-40916C?style=flat-square">
         </div>
@@ -853,7 +875,7 @@ This project is distributed under the [MIT License](LICENSE).
 <details>
   <summary><b>Do I need Jupyter?</b></summary>
   <br/>
-  No. You can run the full pipeline with <code>python Correlations.py</code>. Jupyter is only needed for the notebook.
+  No. You can run the full pipeline with <code>python Correlations.py</code>.
 </details>
 
 <details>
@@ -865,7 +887,7 @@ This project is distributed under the [MIT License](LICENSE).
 <details>
   <summary><b>How do I add a new cultural hotspot?</b></summary>
   <br/>
-  Add a row to <code>Information/places.csv</code> with <code>name, latitude, longitude</code>. The pipeline will generate a new distance column (<code>d_t_...</code>) automatically.
+  Add a row to <code>Information/cultural_places.csv</code> with <code>place_name, latitude, longitude</code>. The pipeline will generate a new distance column (<code>d_t_&lt;slug&gt;</code>) automatically and will record the mapping in <code>&lt;result&gt;_places_mapping.csv</code>.
 </details>
 
 ---
